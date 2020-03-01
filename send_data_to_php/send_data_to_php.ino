@@ -1,14 +1,16 @@
-#include "esp_camera.h"
 #include <WiFi.h>
+#include "esp_camera.h"
 #include "esp_http_client.h"
 #include "Arduino.h"
 
+// *****************
+// ** Definitions **
+// *****************
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
 #define SIOD_GPIO_NUM     26
 #define SIOC_GPIO_NUM     27
-
 #define Y9_GPIO_NUM       35
 #define Y8_GPIO_NUM       34
 #define Y7_GPIO_NUM       39
@@ -20,10 +22,75 @@
 #define VSYNC_GPIO_NUM    25
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
-
 #define LAMP 4
 
-int incomingByte = 0;
+#define LED_ERROR_SIGNAL  1
+#define DETAILED_HTTP_STATUS 0
+
+// ************
+// ** Gobals **
+// ************
+  int incomingByte = 0;
+  String baseURL = "http://192.168.1.1/esp32RecData.php";
+  const char* ssid = "rp02";
+  const char* passwd = "6fe0e47522afd48aed047686e305186c";
+
+// *************
+// ** Methods **
+// *************
+bool initCamera();
+bool initWifi();
+void showLEDError(int _flashes);
+esp_err_t http_event_handler(esp_http_client_event_t *evt);
+esp_err_t take_send_photo();
+
+// **************
+// **   Main   **
+// **************
+void setup() {
+  // Init Serial
+    Serial.begin(115200);
+    Serial.setDebugOutput(true);
+    Serial.println();
+
+  // Init LED
+    pinMode(LAMP, OUTPUT);
+    digitalWrite(LAMP, LOW);
+
+  // Main Init
+  if(LED_ERROR_SIGNAL){
+    if(!initCamera())
+      showLEDError(2);
+    if(!initWifi())
+      showLEDError(3);
+  
+  } else {
+    if(initCamera() && initWifi())
+      Serial.println("[*] INIT SUCCESSFUL");
+    else
+      Serial.println("[!] INIT FAILED");
+  }
+  
+  
+    
+}
+
+void loop() {
+   if (Serial.available() > 0) {
+      digitalWrite(LAMP, HIGH);
+      delay(500);
+      take_send_photo();
+      digitalWrite(LAMP, LOW);
+      // Trigger once per SerialRead
+      while(Serial.available() > 0) {
+        char t = Serial.read();
+      }
+   }
+}
+
+// *********************
+// ** Implementations **
+// *********************
 
 bool initCamera(){
 
@@ -76,8 +143,7 @@ bool initCamera(){
 
 bool initWifi(){
 
-  WiFi.begin("rp02", "6fe0e47522afd48aed047686e305186c");
-  
+  WiFi.begin(ssid, passwd);
   Serial.print("[*] Connect to WiFi");
   
   while (WiFi.status() != WL_CONNECTED) {
@@ -94,111 +160,103 @@ bool initWifi(){
   return true;
 }
 
+// *****************************************
+// ** Shows Error Codes with LED flasges  ** 
+// *****************************************
+// ** CODE    Description                 **
+// ** 01      /                           **
+// ** 02      Camera init failed          **
+// ** 03      Wifi init failed            **
+// ** 04      /                           **
+// ** 05      /                           **
+// *****************************************
+void showLEDError(int _flashes){
 
-void setup() {
-  Serial.begin(115200);
-  Serial.setDebugOutput(true);
-  Serial.println();
-
-  // Init stuff
-  pinMode(LAMP, OUTPUT);
-  digitalWrite(LAMP, LOW);
-  if(initCamera() && initWifi())
-    Serial.println("[*] INIT SUCCESSFUL");
-  else
-    Serial.println("[!] INIT FAILED");
-
-  
-  digitalWrite(LAMP, HIGH);
-  delay(500);
-  take_send_photo();
-  delay(500);
-  digitalWrite(LAMP, LOW);
-
+  while(_flashes > 0)
+  {
+      digitalWrite(LAMP, HIGH);
+      delay(500);
+      digitalWrite(LAMP, LOW);
+      delay(200);
+      _flashes--;
+  }
   
 }
 
-esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+// *********************************
+// ** Serial print of HTTP Event  ** 
+// *********************************
+esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
+  // Check if detailed Info is wanted
+    if(!DETAILED_HTTP_STATUS)
+      return ESP_OK;
+ 
   switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
-      Serial.println("HTTP_EVENT_ERROR");
+      Serial.println("[!] HTTP_EVENT_ERROR");
       break;
     case HTTP_EVENT_ON_CONNECTED:
-      Serial.println("HTTP_EVENT_ON_CONNECTED");
+      Serial.println("[*] HTTP_EVENT_ON_CONNECTED");
       break;
     case HTTP_EVENT_HEADER_SENT:
-      Serial.println("HTTP_EVENT_HEADER_SENT");
+      Serial.println("[*] HTTP_EVENT_HEADER_SENT");
       break;
     case HTTP_EVENT_ON_HEADER:
       Serial.println();
-      Serial.printf("HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+      Serial.printf("[*] HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
       break;
     case HTTP_EVENT_ON_DATA:
       Serial.println();
-      Serial.printf("HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-      if (!esp_http_client_is_chunked_response(evt->client)) {
-        // Write out data
-        // printf("%.*s", evt->data_len, (char*)evt->data);
-      }
+      Serial.printf("[*] HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
       break;
     case HTTP_EVENT_ON_FINISH:
       Serial.println("");
-      Serial.println("HTTP_EVENT_ON_FINISH");
+      Serial.println("[*] HTTP_EVENT_ON_FINISH");
       break;
     case HTTP_EVENT_DISCONNECTED:
-      Serial.println("HTTP_EVENT_DISCONNECTED");
+      Serial.println("[*] HTTP_EVENT_DISCONNECTED");
       break;
   }
   return ESP_OK;
 }
 
-static esp_err_t take_send_photo()
+// ****************************************
+// ** Takes Image and send it to baseURL ** 
+// ****************************************
+esp_err_t take_send_photo()
 {
-  Serial.println("Taking picture...");
-  camera_fb_t * fb = NULL;
-  esp_err_t res = ESP_OK;
-
-  fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    return ESP_FAIL;
-  }
-
-  esp_http_client_handle_t http_client;
+  // Take Image
+    camera_fb_t * fb = NULL;
+    esp_err_t res = ESP_OK;
+    fb = esp_camera_fb_get();
   
-  esp_http_client_config_t config_client = {0};
-  config_client.url = "http://192.168.1.1/index.php";
-  config_client.event_handler = _http_event_handler;
-  config_client.method = HTTP_METHOD_POST;
+    if (!fb) {
+      Serial.println("[!] Camera capture failed");
+      return ESP_FAIL;
+    }
 
-  http_client = esp_http_client_init(&config_client);
+  // Prepare HTTP Client
+    esp_http_client_handle_t http_client;
+    String url = (baseURL + "?ip=" + WiFi.localIP().toString() + "&quality=" + WiFi.RSSI() + "dBm");
+    esp_http_client_config_t config_client = {0};
+    config_client.url = const_cast<char*>(url.c_str());
+    config_client.event_handler = http_event_handler;
+    config_client.method = HTTP_METHOD_POST;
+    http_client = esp_http_client_init(&config_client);
 
-  esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
+  // Send Image
+    esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
+    esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
+    esp_err_t err = esp_http_client_perform(http_client);
+  
+    if (err == ESP_OK) {
+      Serial.print("[*] Status Code ");
+      Serial.println(esp_http_client_get_status_code(http_client));
+    }
 
-  esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
-
-  esp_err_t err = esp_http_client_perform(http_client);
-  if (err == ESP_OK) {
-    Serial.print("esp_http_client_get_status_code: ");
-    Serial.println(esp_http_client_get_status_code(http_client));
-  }
-
-  esp_http_client_cleanup(http_client);
+  // Clean
+    esp_http_client_cleanup(http_client);
 
   esp_camera_fb_return(fb);
-}
-
-
-void loop() {
-   if (Serial.available() > 0) {
-      digitalWrite(LAMP, HIGH);
-      delay(500);
-      take_send_photo();
-      digitalWrite(LAMP, LOW);
-      // Trigger once per SerialRead
-      while(Serial.available() > 0) {
-        char t = Serial.read();
-      }
-   }
 }
