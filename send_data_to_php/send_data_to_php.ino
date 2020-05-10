@@ -26,6 +26,8 @@
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_LOAD  300         /* Time ESP32 will load capacitors (in seconds) */
+#define TIME_TO_SLEEP  30         /* Time ESP32 will load capacitors (in seconds) */
+
 
 #define LED_ERROR_SIGNAL  0     // [0|1]
 #define DETAILED_HTTP_STATUS 0  // [0|1]
@@ -38,7 +40,6 @@
   String baseURL = "http://192.168.1.1/esp32RecData.php";
   const char* ssid = "rp02";
   const char* passwd = "6fe0e47522afd48aed047686e305186c";
-  uint64_t TIME_TO_SLEEP = 30;
   
 // *************
 // ** Methods **
@@ -78,16 +79,17 @@ void setup() {
   
   } else {
     if(initCamera() && initWifi())
-      Serial.println("[*] INIT SUCCESSFUL");
+      Serial.println("[*] Init finished");
     else 
-      Serial.println("[!] INIT FAILED");
+      Serial.println("[!] Init failed");
   }
 }
 
 // If TIME_TP_SLEEP > 0 this will not be executed
 void loop() {
+   Serial.println("[*] Taking photo");
    take_send_photo();
-   Serial.println("[*] Sleeping for " + String(TIME_TO_LOAD) + " Seconds before taking next photo...");
+   Serial.println("[*] Sleeping for " + String(TIME_TO_SLEEP) + " Seconds before taking next photo...");
    delay(TIME_TO_SLEEP*1000);
 }
 
