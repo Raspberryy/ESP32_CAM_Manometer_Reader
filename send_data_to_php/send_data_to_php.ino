@@ -24,20 +24,26 @@
 #define PCLK_GPIO_NUM     22
 #define LAMP 4
 
-#define LED_ERROR_SIGNAL  1
-#define DETAILED_HTTP_STATUS 0
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_LOAD  300         /* Time ESP32 will load capacitors (in seconds) */
+
+#define LED_ERROR_SIGNAL  0     // [0|1]
+#define DETAILED_HTTP_STATUS 0  // [0|1]
+
+#define FLASH_FOR_CAM 1         // [0|1]
 
 // ************
 // ** Gobals **
 // ************
-  int incomingByte = 0;
   String baseURL = "http://192.168.1.1/esp32RecData.php";
   const char* ssid = "rp02";
   const char* passwd = "6fe0e47522afd48aed047686e305186c";
-
+  uint64_t TIME_TO_SLEEP = 30;
+  
 // *************
 // ** Methods **
 // *************
+void loadCapacitors();
 bool initCamera();
 bool initWifi();
 void showLEDError(int _flashes);
@@ -53,6 +59,12 @@ void setup() {
     Serial.setDebugOutput(true);
     Serial.println();
 
+  // Check if caps need to be loaded
+     if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER)
+       loadCapacitors();
+     else
+       Serial.println("[*] Capacitors loaded. Start init");
+     
   // Init LED
     pinMode(LAMP, OUTPUT);
     digitalWrite(LAMP, LOW);
@@ -67,30 +79,30 @@ void setup() {
   } else {
     if(initCamera() && initWifi())
       Serial.println("[*] INIT SUCCESSFUL");
-    else
+    else 
       Serial.println("[!] INIT FAILED");
   }
-  
-  
-    
 }
 
+// If TIME_TP_SLEEP > 0 this will not be executed
 void loop() {
-   if (Serial.available() > 0) {
-      digitalWrite(LAMP, HIGH);
-      delay(500);
-      take_send_photo();
-      digitalWrite(LAMP, LOW);
-      // Trigger once per SerialRead
-      while(Serial.available() > 0) {
-        char t = Serial.read();
-      }
-   }
+   take_send_photo();
+   Serial.println("[*] Sleeping for " + String(TIME_TO_LOAD) + " Seconds before taking next photo...");
+   delay(TIME_TO_SLEEP*1000);
 }
 
 // *********************
 // ** Implementations **
 // *********************
+
+void loadCapacitors(){
+  esp_sleep_enable_timer_wakeup(TIME_TO_LOAD * uS_TO_S_FACTOR);
+  
+  Serial.println("[*] Loading Capacitors for " + String(TIME_TO_LOAD) + " Seconds now!");
+  Serial.flush(); 
+  
+  esp_deep_sleep_start();
+}
 
 bool initCamera(){
 
@@ -229,8 +241,15 @@ esp_err_t take_send_photo()
   // Take Image
     camera_fb_t * fb = NULL;
     esp_err_t res = ESP_OK;
-    fb = esp_camera_fb_get();
-  
+    if (FLASH_FOR_CAM) {
+      digitalWrite(LAMP, HIGH);
+      delay(300);
+      fb = esp_camera_fb_get();
+      digitalWrite(LAMP, LOW);
+    } else {
+      fb = esp_camera_fb_get();
+    }
+      
     if (!fb) {
       Serial.println("[!] Camera capture failed");
       return ESP_FAIL;
