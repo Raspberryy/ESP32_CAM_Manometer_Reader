@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30413.136
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "ManometerReader", "ManometerReader\ManometerReader.pyproj", "{B20C4D29-A439-4357-A1BA-C8CA5F611116}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B20C4D29-A439-4357-A1BA-C8CA5F611116}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B20C4D29-A439-4357-A1BA-C8CA5F611116}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2BAEECAA-58ED-4192-90AC-925B3F1B805F}
+	EndGlobalSection
+EndGlobal
